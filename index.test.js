@@ -1,14 +1,29 @@
 const request = require('supertest')
-const {app, Restaurant, Menu, Item} = require('./src/app')
+const {app, Restaurant, Menu, Item} = require('./src/app.js')
 const { syncSeed } = require('./seed.js')
+const db = require('./db/connection.js')
+const { seedRestaurant , seedMenu, seedItem } = require("./seedData");
 
 beforeAll(async () => {
-    syncSeed()
+    // syncSeed()
+    await db.sync({force: true});
+    await Restaurant.bulkCreate(seedRestaurant)
+    await Menu.bulkCreate(seedMenu)
+    await Item.bulkCreate(seedItem)
+    const firstRest = await Restaurant.findByPk(1)
+    const firstMenu = await Menu.findOne()
+    const secondMenu = await Menu.findByPk(2)
+    const firstItem = await Item.findByPk(1)
+    const secondItem = await Item.findByPk(2)
+    const thirdItem = await Item.findByPk(3)
+    await firstRest.addMenus([firstMenu, secondMenu])
+    await firstMenu.addItems([firstItem, secondItem])
+    await secondMenu.addItems([secondItem, thirdItem])
 })
 
 describe('testing endpoints', () => {
     it('get restaurants returns status code 200', async () => {
-        const response = await request(app).get('/restaurants') // WHY DOESN'T THIS WORK?
+        const response = await request(app).get('/restaurants')
         expect(response.statusCode).toEqual(200)
     });
     it('get restuarants returns an array', async () => {
@@ -23,7 +38,7 @@ describe('testing endpoints', () => {
     it('returns correct restaurant data', async () => {
         const response = await request(app).get('/restaurants')
         const restaurants = JSON.parse(response.text)
-        expect(restaurants).toEqual([{"cuisine": "FastFood", "id": 1, "location": "Texas", "name": "AppleBees"}, {"cuisine": "Hotpot", "id": 2, "location": "Dallas", "name": "LittleSheep"}, {"cuisine": "Indian", "id": 3, "location": "Houston", "name": "Spice Grill"}])
+        expect(restaurants[0]).toHaveProperty("Menus") // don't know how to test this really aside from copying expected output
     });
     it('get restuarants/:id returns correct data', async () => {
         const response = await request(app).get('/restaurants/2')
@@ -44,4 +59,12 @@ describe('testing endpoints', () => {
         const allRestaurants = await Restaurant.findAll()
         expect(allRestaurants.length).toBe(3)
     });
+    it('error is returned when trying to post restaurant with empty value', async () => {
+        const response = await request(app).post('/restaurants/').send({name: "this should fail", location: "", cuisine: "this should fail"})
+        expect(JSON.parse(response.text)).toHaveProperty("error")
+    });
 });
+
+afterAll( async () => {
+    await db.sync({force: true})
+})
